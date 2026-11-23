@@ -61,6 +61,7 @@ loader.load('./pixy.glb',gltf=>{
     }
     if(node.isMesh){node.frustumCulled=false;node.castShadow=false;node.receiveShadow=false}
   });
+  console.info('Pixy joints',bones.size,Array.from(bones.keys()).filter(k=>/Arm|Shoulder/.test(k)));
   camera.position.set(0,0.93,6.2);
   camera.lookAt(0,0.84,0);
   status.textContent='';
