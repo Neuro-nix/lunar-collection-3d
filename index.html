@@ -1,0 +1,104 @@
+Warning: fs was declared with const; use let for reassignable variables.
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Лунная коллекция</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Manrope:wght@400;500;700&display=swap">
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<style>
+/* Layout: витрина бутика ночью — две «витрины» с моделями, подписи как ярлыки на нитке */
+:root{
+  --night:#1a0f14;      /* фон: ночное бордо */
+  --velvet:#2a1720;     /* поверхность витрины */
+  --gilt:#d9a45b;       /* золото луны, акцент */
+  --ivory:#f3e7da;      /* основной текст */
+  --dust:#b79a8c;       /* приглушённый текст */
+  --seam:#4a2a35;       /* линии и рамки */
+  --display:"Marcellus","Cormorant Garamond",Georgia,serif;
+  --body:"Manrope","Helvetica Neue",Arial,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--night)}
+body{color:var(--ivory);font-family:var(--body);font-size:16px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+.wrap{max-width:1180px;margin:0 auto}
+header{padding-block:44px 28px;display:grid;gap:10px}
+.eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--gilt)}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(34px,6vw,60px);line-height:1.05;margin:0;text-wrap:balance}
+.lede{color:var(--dust);max-width:58ch;margin:0}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+@media (max-width:760px){.grid{grid-template-columns:1fr}}
+.item{display:grid;gap:14px;min-width:0}
+.case{position:relative;aspect-ratio:1/1;max-width:100%;border:1px solid var(--seam);border-radius:4px;
+  background:radial-gradient(120% 90% at 50% 18%,#3a2030 0%,var(--velvet) 55%,var(--night) 100%);overflow:hidden}
+.case::after{content:"☾";position:absolute;top:14px;right:18px;font-family:var(--display);color:var(--gilt);opacity:.55;font-size:22px;pointer-events:none}
+model-viewer{width:100%;height:100%;--poster-color:transparent;--progress-bar-color:var(--gilt);background:transparent}
+.ar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);border:1px solid var(--gilt);background:rgba(26,15,20,.78);
+  color:var(--ivory);font:600 14px var(--body);letter-spacing:.02em;padding:11px 18px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.ar:hover{background:var(--gilt);color:var(--night)}
+.ar:focus-visible{outline:2px solid var(--ivory);outline-offset:3px}
+.tag{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px;padding-bottom:12px;border-bottom:1px solid var(--seam)}
+.tag h2{font-family:var(--display);font-weight:400;font-size:26px;margin:0}
+.tag span{color:var(--dust);font-size:14px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;margin:0;font-size:14px}
+dt{color:var(--dust)}dd{margin:0;font-variant-numeric:tabular-nums}
+.how{margin-top:34px;padding-top:20px;border-top:1px solid var(--seam);color:var(--dust);font-size:14px;max-width:70ch}
+.how b{color:var(--ivory);font-weight:600}
+@media (prefers-reduced-motion:reduce){model-viewer{--auto-rotate:none}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Демо-витрина · 3D из Tripo</div>
+    <h1>Лунная коллекция</h1>
+    <p class="lede">Покрутите вещь мышкой или пальцем, приблизьте колёсиком или щипком. На телефоне кнопка внизу откроет камеру и поставит предмет у вас в комнате в настоящем размере.</p>
+  </header>
+
+  <main class="grid">
+    <section class="item" aria-labelledby="t-sneaker">
+      <div class="case">
+        <model-viewer id="mv-sneaker" src="sneaker.glb" alt="Бордовый кроссовок с лунным орнаментом"
+          camera-controls touch-action="pan-y" auto-rotate auto-rotate-delay="1500" rotation-per-second="18deg"
+          shadow-intensity="1" shadow-softness=".9" exposure="1.05" environment-image="neutral"
+          camera-orbit="35deg 72deg auto" ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed" ar-placement="floor">
+          <button slot="ar-button" class="ar" id="ar-sneaker">Примерить у себя</button>
+        </model-viewer>
+      </div>
+      <div class="tag"><h2 id="t-sneaker">Кроссовок «Селена»</h2><span>замша, полумесяц, лозы</span></div>
+      <dl>
+        <dt>Размер в AR</dt><dd>около 30 см в длину</dd>
+        <dt>Режим Tripo</dt><dd>HD модель, облегчена для сайта</dd>
+        <dt>Полигонов</dt><dd>153 000</dd>
+      </dl>
+    </section>
+
+    <section class="item" aria-labelledby="t-chair">
+      <div class="case">
+        <model-viewer id="mv-chair" src="armchair.glb" alt="Готическое бархатное кресло с луной и звёздами"
+          camera-controls touch-action="pan-y" auto-rotate auto-rotate-delay="1500" rotation-per-second="18deg"
+          shadow-intensity="1" shadow-softness=".9" exposure="1.05" environment-image="neutral"
+          camera-orbit="30deg 78deg auto" ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed" ar-placement="floor">
+          <button slot="ar-button" class="ar" id="ar-chair">Поставить в комнату</button>
+        </model-viewer>
+      </div>
+      <div class="tag"><h2 id="t-chair">Кресло «Полнолуние»</h2><span>бархат, резное дерево</span></div>
+      <dl>
+        <dt>Размер в AR</dt><dd>около 1 м в высоту</dd>
+        <dt>Режим Tripo</dt><dd>HD модель, облегчена для сайта</dd>
+        <dt>Полигонов</dt><dd>152 000</dd>
+      </dl>
+    </section>
+  </main>
+
+  <p class="how"><b>Как это сделано.</b> Каждая вещь — одна картинка, превращённая в 3D-модель в Tripo. Модель скачана в формате GLB и вставлена на страницу стандартным просмотрщиком 3D. Бренды и названия вымышлены, это демонстрация для видео.</p>
+</div>
+
+</body>
+</html>
