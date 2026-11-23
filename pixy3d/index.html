@@ -8,7 +8,7 @@
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box}
-html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:radial-gradient(ellipse at 50% 45%,#321b56 0%,#211333 66%,#160f26 100%);border-radius:24px}
 body{display:grid;place-items:center}
 canvas{display:block;width:100%;height:100%;background:transparent;outline:0}
 #status{position:fixed;inset:auto 8px 8px;color:#fff;font:12px/1.4 system-ui,sans-serif;text-align:center;text-shadow:0 1px 4px #000;pointer-events:none}
@@ -89,17 +89,17 @@ function frame(){
   requestAnimationFrame(frame);
   if(!character)return;
   const t=reduced?0:clock.getElapsedTime();
-  const wave=!reduced&&t%13>5&&t%13<8.6?Math.sin((t%13-5)/3.6*Math.PI):0;
+  const phase=t%9;const wave=!reduced&&phase>3.4&&phase<6.6?Math.sin((phase-3.4)/3.2*Math.PI):0;
   bonePose('Hips',(n,b)=>{n.position.y=b.position.y+Math.sin(t*1.9)*0.012});
   bonePose('Spine',(n,b)=>{n.rotation.set(b.rotation.x+Math.sin(t*0.9)*0.018,b.rotation.y,b.rotation.z+Math.sin(t*1.35)*0.025)});
   bonePose('Spine1',(n,b)=>{n.rotation.set(b.rotation.x,b.rotation.y+Math.sin(t*0.7)*0.025,b.rotation.z+Math.sin(t*1.35+0.5)*0.018)});
   bonePose('Spine2',(n,b)=>{n.rotation.y=b.rotation.y+Math.sin(t*0.55)*0.035});
   bonePose('Head',(n,b)=>{n.rotation.set(b.rotation.x+Math.sin(t*0.72)*0.025,b.rotation.y+Math.sin(t*0.48)*0.13,b.rotation.z+Math.sin(t*0.62)*0.018)});
-  bonePose('LeftArm',(n,b)=>{n.rotation.z=b.rotation.z-0.78+Math.sin(t*1.1+1)*0.035});
-  bonePose('RightArm',(n,b)=>{n.rotation.z=b.rotation.z+0.78+Math.sin(t*1.1)*0.045-wave*1.45});
-  bonePose('RightForeArm',(n,b)=>{n.rotation.z=b.rotation.z+0.2+Math.sin(t*2.2)*0.025+wave*0.3*Math.sin(t*8)});
+  bonePose('LeftArm',(n,b)=>{n.rotation.z=b.rotation.z-1.12+Math.sin(t*1.1+1)*0.04});
+  bonePose('RightArm',(n,b)=>{n.rotation.z=b.rotation.z+1.12+Math.sin(t*1.1)*0.05-wave*1.8});
+  bonePose('RightForeArm',(n,b)=>{n.rotation.z=b.rotation.z+0.3+Math.sin(t*2.2)*0.04+wave*0.65*Math.sin(t*8)});
   bonePose('RightHand',(n,b)=>{n.rotation.z=b.rotation.z+wave*0.12*Math.sin(t*8)});
-  pivot.rotation.y=reduced?0:Math.sin(t*0.32)*0.06;
+  pivot.rotation.y=reduced?0:Math.sin(t*0.72)*0.24;pivot.rotation.z=reduced?0:Math.sin(t*1.3)*0.035;pivot.position.y=reduced?0:Math.sin(t*1.8)*0.045;
   renderer.render(scene,camera);
 }
 frame();
