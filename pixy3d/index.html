@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Пикси — 3D-маскот</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}
+body{display:grid;place-items:center}
+canvas{display:block;width:100%;height:100%;background:transparent;outline:0}
+#status{position:fixed;inset:auto 8px 8px;color:#fff;font:12px/1.4 system-ui,sans-serif;text-align:center;text-shadow:0 1px 4px #000;pointer-events:none}
+#status:empty{display:none}
+</style>
+</head>
+<body>
+<canvas aria-label="Анимированный 3D-персонаж Пикси"></canvas>
+<div id="status" role="status" aria-live="polite"></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/loaders/GLTFLoader.js';
+
+const canvas=document.querySelector('canvas');
+const status=document.querySelector('#status');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(27,1,0.01,100);
+const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'low-power'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5));
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.15;
+renderer.setClearColor(0x000000,0);
+scene.add(new THREE.HemisphereLight(0xffffff,0x393052,2.0));
+const key=new THREE.DirectionalLight(0xffffff,2.3);
+key.position.set(-2.5,4,5);scene.add(key);
+const fill=new THREE.DirectionalLight(0xa6fa08,0.55);
+fill.position.set(3,1,-2);scene.add(fill);
+
+const pivot=new THREE.Group();scene.add(pivot);
+const bones=new Map(),rest=new Map();
+let character=null,baseHeight=0;
+const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const loader=new GLTFLoader();
+loader.load('./pixy.glb',gltf=>{
+  character=gltf.scene;
+  const box=new THREE.Box3().setFromObject(character);
+  const size=box.getSize(new THREE.Vector3());
+  const center=box.getCenter(new THREE.Vector3());
+  baseHeight=Math.max(size.y,0.01);
+  character.position.set(-center.x,-box.min.y,-center.z);
+  character.scale.setScalar(1.68/baseHeight);
+  pivot.add(character);
+  character.traverse(node=>{
+    if(node.isBone){
+      const name=node.name.split(':').pop();
+      bones.set(name,node);
+      rest.set(name,{rotation:node.rotation.clone(),position:node.position.clone()});
+    }
+    if(node.isMesh){node.frustumCulled=false;node.castShadow=false;node.receiveShadow=false}
+  });
+  camera.position.set(0,0.93,2.7);
+  camera.lookAt(0,0.84,0);
+  status.textContent='';
+},undefined,error=>{
+  status.textContent='Не удалось загрузить Пикси';
+  console.error('Pixy GLB load failed',error);
+});
+
+function bonePose(name,apply){
+  const node=bones.get(name),base=rest.get(name);
+  if(node&&base)apply(node,base);
+}
+const clock=new THREE.Clock();
+function resize(){
+  const rect=canvas.getBoundingClientRect();
+  const w=Math.max(1,Math.round(rect.width*renderer.getPixelRatio()));
+  const h=Math.max(1,Math.round(rect.height*renderer.getPixelRatio()));
+  if(canvas.width!==w||canvas.height!==h){renderer.setSize(rect.width,rect.height,false)}
+  camera.aspect=Math.max(0.2,rect.width/Math.max(rect.height,1));
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(canvas);
+resize();
+
+function frame(){
+  requestAnimationFrame(frame);
+  if(!character)return;
+  const t=reduced?0:clock.getElapsedTime();
+  const wave=!reduced&&t%13>5&&t%13<8.6?Math.sin((t%13-5)/3.6*Math.PI):0;
+  bonePose('Hips',(n,b)=>{n.position.y=b.position.y+Math.sin(t*1.9)*0.012});
+  bonePose('Spine',(n,b)=>{n.rotation.set(b.rotation.x+Math.sin(t*0.9)*0.018,b.rotation.y,b.rotation.z+Math.sin(t*1.35)*0.025)});
+  bonePose('Spine1',(n,b)=>{n.rotation.set(b.rotation.x,b.rotation.y+Math.sin(t*0.7)*0.025,b.rotation.z+Math.sin(t*1.35+0.5)*0.018)});
+  bonePose('Spine2',(n,b)=>{n.rotation.y=b.rotation.y+Math.sin(t*0.55)*0.035});
+  bonePose('Head',(n,b)=>{n.rotation.set(b.rotation.x+Math.sin(t*0.72)*0.025,b.rotation.y+Math.sin(t*0.48)*0.13,b.rotation.z+Math.sin(t*0.62)*0.018)});
+  bonePose('LeftArm',(n,b)=>{n.rotation.z=b.rotation.z+Math.sin(t*1.1+1)*0.035});
+  bonePose('RightArm',(n,b)=>{n.rotation.z=b.rotation.z+Math.sin(t*1.1)*0.045+wave*1.05});
+  bonePose('RightForeArm',(n,b)=>{n.rotation.z=b.rotation.z+Math.sin(t*2.2)*0.025+wave*0.24*Math.sin(t*8)});
+  bonePose('RightHand',(n,b)=>{n.rotation.z=b.rotation.z+wave*0.12*Math.sin(t*8)});
+  pivot.rotation.y=reduced?0:Math.sin(t*0.32)*0.06;
+  renderer.render(scene,camera);
+}
+frame();
+</script>
+</body>
+</html>
