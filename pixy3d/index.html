@@ -61,6 +61,7 @@ loader.load('./pixy.glb',gltf=>{
     }
     if(node.isMesh){node.frustumCulled=false;node.castShadow=false;node.receiveShadow=false}
   });
+  window.__pixyDebug={names:[...bones.keys()],angles:()=>Object.fromEntries(['LeftArm','RightArm','RightForeArm','RightHand'].map(k=>[k,bones.get(k)?.rotation.toArray()]))};
   camera.position.set(0,0.93,6.2);
   camera.lookAt(0,0.84,0);
   status.textContent='';
