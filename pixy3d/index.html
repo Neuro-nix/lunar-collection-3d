@@ -42,6 +42,7 @@ fill.position.set(3,1,-2);scene.add(fill);
 const pivot=new THREE.Group();scene.add(pivot);
 const bones=new Map(),rest=new Map();
 let character=null,baseHeight=0;
+const eyelids=[];
 const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const loader=new GLTFLoader();
 loader.load('./pixy.glb',gltf=>{
@@ -64,7 +65,6 @@ loader.load('./pixy.glb',gltf=>{
   });
   character.updateMatrixWorld(true);
   const headBone=bones.get('head');
-  const eyelids=[];
   if(headBone){
     const lidMat=new THREE.MeshStandardMaterial({color:0xc9ed67,roughness:0.94,metalness:0});
     const eyeCenters=[[-0.145,1.225,0.535],[0.145,1.225,0.535]];
@@ -138,7 +138,6 @@ window.addEventListener('message',e=>{
   if(e.data&&e.data.type==='pixy-pointer')setPointer(e.data.x,e.data.y);
 });
 let nextBlink=3.2,blinkStart=-10;
-const blinkEvents=[3.2,7.8,13.1,18.0,23.4,29.0,34.2,39.8,45.0,50.7,56.2,61.4,67.3,72.5,78.4,83.8,89.5];
 let blinkIndex=0;
 function frame(){
   requestAnimationFrame(frame);
