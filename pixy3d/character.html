@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Пикси — 3D-маскот</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:radial-gradient(ellipse at 50% 45%,#321b56 0%,#211333 66%,#160f26 100%);border-radius:24px}
+body{display:grid;place-items:center}
+canvas{display:block;width:100%;height:100%;background:transparent;outline:0}
+#status{position:fixed;inset:auto 8px 8px;color:#fff;font:12px/1.4 system-ui,sans-serif;text-align:center;text-shadow:0 1px 4px #000;pointer-events:none}
+#status:empty{display:none}
+</style>
+</head>
+<body>
+<canvas aria-label="Анимированный 3D-персонаж Пикси"></canvas>
+<div id="status" role="status" aria-live="polite"></div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/loaders/GLTFLoader.js';
+
+const canvas = document.querySelector('canvas');
+const status = document.querySelector('#status');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(27, 1, 0.01, 100);
+camera.position.set(0, 0.93, 6.2);
+camera.lookAt(0, 0.84, 0);
+
+const renderer = new THREE.WebGLRenderer({canvas, alpha: true, antialias: true, powerPreference: 'low-power'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x393052, 2));
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.3);
+keyLight.position.set(-2.5, 4, 5);
+scene.add(keyLight);
+const fillLight = new THREE.DirectionalLight(0xa6fa08, 0.55);
+fillLight.position.set(3, 1, -2);
+scene.add(fillLight);
+
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const characterSpace = new THREE.Group();
+scene.add(characterSpace);
+const rig = new Map();
+const pointer = new THREE.Vector2();
+const eyeGaze = {value: new THREE.Vector2()};
+const eyelid = {value: 0};
+const headGaze = new THREE.Vector2();
+const restXAxis = new THREE.Vector3(1, 0, 0);
+const boneAxis = new THREE.Vector3(0, 1, 0);
+const aim = new THREE.Vector3();
+const aimBase = new THREE.Vector3();
+const offset = new THREE.Quaternion();
+const orientation = new THREE.Quaternion();
+const parentInverse = new THREE.Quaternion();
+const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+function installFace(mesh, mask) {
+  const restToModel = mesh.matrixWorld.clone();
+  mesh.material.onBeforeCompile = shader => {
+    shader.uniforms.eyeMask = {value: mask};
+    shader.uniforms.eyeGaze = eyeGaze;
+    shader.uniforms.eyelid = eyelid;
+    shader.uniforms.restToModel = {value: restToModel};
+    shader.vertexShader = shader.vertexShader.replace('#include <common>',
+      '#include <common>\nuniform mat4 restToModel;\nvarying vec3 facePosition;');
+    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>',
+      '#include <begin_vertex>\nfacePosition = (restToModel * vec4(position, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `
+      #include <common>
+      uniform sampler2D eyeMask;
+      uniform vec2 eyeGaze;
+      uniform float eyelid;
+      varying vec3 facePosition;
+
+      vec3 sampleMask(vec2 pixel) {
+        vec2 uv = (pixel - vec2(100., 164.)) / vec2(312., 140.);
+        return texture2D(eyeMask, clamp(uv, 0., 1.)).rgb;
+      }
+
+      float oval(vec2 point, vec2 center, vec2 radii) {
+        float edge = length((point - center) / radii);
+        return 1. - smoothstep(.94, 1.04, edge);
+      }
+
+      vec3 animateEye(vec3 original, vec3 model, vec3 actualMask, vec2 pixel) {
+        float coverage = max(actualMask.r, actualMask.g);
+        float side = step(actualMask.r, actualMask.g);
+        float inward = 1. - 2. * side;
+        float eyeX = mix(165., 347., side);
+        float closure = eyelid;
+        float openHeight = max(.024, 1. - closure);
+        vec2 eyePixel = vec2(pixel.x, 248. + (pixel.y - 248.) / openHeight);
+        vec3 eyeShape = sampleMask(eyePixel);
+        float outline = mix(eyeShape.r, eyeShape.g, side);
+        float white = eyeShape.b * outline;
+
+        float rim = clamp((eyePixel.y - 201.) / 93., 0., 1.);
+        vec3 sclera = mix(vec3(1., .93, .84), vec3(.87, .73, .59), rim * .42);
+        vec2 center = vec2(eyeX + inward * 10., 236.) + eyeGaze * vec2(25., 20.);
+        vec2 p = eyePixel - center;
+        p.x += p.y * inward * .19;
+        float iris = oval(p, vec2(0.), vec2(32., 41.));
+        float pupil = oval(p, vec2(inward * 1.5, -2.), vec2(25., 34.));
+        vec3 irisColor = mix(vec3(.038, .012, .027), vec3(.125, .035, .102),
+                             smoothstep(-30., 35., p.y));
+        irisColor = mix(irisColor, vec3(.012, .004, .009), pupil);
+        irisColor = mix(irisColor, vec3(1., .98, .92), oval(p, vec2(inward * 9., -19.), vec2(9., 10.)));
+        irisColor = mix(irisColor, vec3(.64, .45, .52), oval(p, vec2(-inward * 12., 15.), vec2(4.5, 4.5)));
+        vec3 ink = vec3(.018, .009, .014);
+        vec3 paint = mix(ink, mix(sclera, irisColor, iris), white);
+
+        float lidShade = .985 - .09 * smoothstep(0., 40., abs(pixel.y - 245.));
+        vec3 lid = vec3(.544, .663, .002) * lidShade;
+        vec3 face = mix(lid, paint, outline);
+        return mix(original, face, coverage * smoothstep(.10, .147, model.z));
+      }
+    `);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
+      #include <map_fragment>
+      vec2 facePixel = vec2((facePosition.x + .36) * (512. / .72),
+                            (1.0425 - facePosition.y) * (400. / .5625));
+      if (facePosition.z > .10 && facePixel.x > 101. && facePixel.x < 411.
+          && facePixel.y > 165. && facePixel.y < 303.) {
+        vec3 mask = sampleMask(facePixel);
+        if (max(mask.r, mask.g) > 0.) {
+          diffuseColor.rgb = animateEye(diffuseColor.rgb, facePosition, mask, facePixel);
+        }
+      }
+    `);
+  };
+}
+
+// Offsets in the character's original axes. These follow the parent joint.
+function rotateJoint(name, pitch, yaw, roll) {
+  const {bone, localRest, modelRest} = rig.get(name);
+  offset.setFromEuler(euler.set(pitch, yaw, roll));
+  orientation.copy(modelRest).invert().multiply(offset).multiply(modelRest);
+  bone.quaternion.copy(localRest).multiply(orientation);
+}
+
+// Aim from the joint's inherited orientation, which preserves the elbow and palm twist.
+function aimJoint(name, x, y, z, twist = 0) {
+  const {bone, localRest} = rig.get(name);
+  bone.parent.getWorldQuaternion(parentInverse).invert();
+  aim.set(x, y, z).normalize().applyQuaternion(parentInverse);
+  aimBase.copy(boneAxis).applyQuaternion(localRest);
+  offset.setFromUnitVectors(aimBase, aim);
+  bone.quaternion.copy(offset).multiply(localRest);
+  if (twist) bone.quaternion.premultiply(orientation.setFromAxisAngle(aim, twist));
+}
+
+const smooth = THREE.MathUtils.smoothstep;
+const lerp = THREE.MathUtils.lerp;
+let greetingStarts = .65;
+let greetingCount = 0;
+let lastBlink = -1;
+let nextBlink = 1.6;
+let blinkCount = 0;
+
+function animateBody(t) {
+  const elapsed = t - greetingStarts;
+  const reach = smooth(elapsed, 0, .64) * (1 - smooth(elapsed, 2.02, 2.77));
+  const waveEnvelope = smooth(elapsed, .48, .83) * (1 - smooth(elapsed, 1.65, 2.13));
+  const sway = Math.sin((elapsed - .70) * 8.9) * waveEnvelope;
+  const wristLag = Math.sin((elapsed - .79) * 8.9) * waveEnvelope;
+  const breath = reducedMotion.matches ? 0 : Math.sin(t * 2.25);
+  const nod = Math.sin(Math.PI * smooth(elapsed, .1, .85)) * .13;
+
+  rotateJoint('spine1', breath * .016, headGaze.x * .049, reach * .047);
+  rotateJoint('spine2', -.023 - reach * .04, headGaze.x * .038, reach * .04);
+  rotateJoint('rightshoulder', 0, -.045 * reach, -.13 * reach);
+  rotateJoint('leftshoulder', 0, 0, -.038);
+  rotateJoint('neck', headGaze.y * .026 + nod * .27, headGaze.x * .054, .032 + reach * .047);
+  rotateJoint('head', headGaze.y * .105 + nod, headGaze.x * .19, .013 - headGaze.x * .04);
+
+  aimJoint('rightarm', lerp(-.43, -.95, reach), lerp(-.89, -.33, reach), .12 + reach * .09, -.04);
+  aimJoint('rightforearm', lerp(-.10, -.36, reach) - sway * .21, lerp(-.89, .87, reach),
+           .33 + reach * .15 + sway * .07, .12 * reach);
+  const rightHand = rig.get('righthand');
+  rightHand.bone.quaternion.copy(rightHand.localRest).multiply(
+    offset.setFromEuler(euler.set(reach * .11 + wristLag * .11, wristLag * .19, -.06 + wristLag * .13))
+  );
+
+  aimJoint('leftarm', .51, -.83, .20 + reach * .11);
+  aimJoint('leftforearm', .11 + reach * .11, -.88 + reach * .11, .38, -.12);
+  const leftHand = rig.get('lefthand');
+  leftHand.bone.quaternion.copy(leftHand.localRest);
+}
+
+function updateBlink(t) {
+  if (t >= nextBlink) {
+    lastBlink = t;
+    blinkCount++;
+    nextBlink = t + [3.8, 4.9, .33, 5.4, 4.3, 3.4][(blinkCount - 1) % 6];
+  }
+  const elapsed = t - lastBlink;
+  eyelid.value = smooth(elapsed, 0, .072) * (1 - smooth(elapsed, .112, .235));
+}
+
+function resize() {
+  const rect = canvas.getBoundingClientRect();
+  camera.aspect = Math.max(.2, rect.width / Math.max(rect.height, 1));
+  camera.updateProjectionMatrix();
+  renderer.setSize(rect.width, rect.height, false);
+}
+new ResizeObserver(resize).observe(canvas);
+resize();
+
+function lookAt(x, y) {
+  if (Number.isFinite(x) && Number.isFinite(y)) {
+    pointer.set(THREE.MathUtils.clamp(x, -1, 1), THREE.MathUtils.clamp(y, -1, 1));
+  }
+}
+if (window.parent === window) {
+  canvas.addEventListener('pointermove', event => {
+    if (event.pointerType === 'touch') return;
+    const rect = canvas.getBoundingClientRect();
+    const distance = Math.max(1, rect.height * .37);
+    lookAt((event.clientX - rect.left - rect.width / 2) / distance,
+           (event.clientY - rect.top - rect.height * .36) / distance);
+  }, {passive: true});
+  canvas.addEventListener('pointerleave', () => lookAt(0, 0));
+} else {
+  window.addEventListener('message', event => {
+    if (event.source !== window.parent || event.origin !== 'https://mid-journey.tilda.ws') return;
+    if (event.data?.type === 'pixy-pointer') lookAt(event.data.x, event.data.y);
+  });
+}
+
+async function start() {
+  const [gltf, mask] = await Promise.all([
+    new GLTFLoader().loadAsync('./pixy.glb'),
+    new THREE.TextureLoader().loadAsync('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATgAAACMCAIAAABnMSLqAAADVElEQVR42u3agXHCMBBEUfXftNIA4zhA5Lvb90cVePXGwLCWJEmSJEmSJEmSJGlm+8aRsVV0LyOa3Oot97Jd4tKGN5yajW31R1fbN47VZux9Z21cC/nc7x6rNV39g81xbUX0SqzqTb7/5+DahuhrrgpQims/oqzGKr3kqr8TPbaYmerMv48fXN9Xen4uMwUSveSqS6UPbmWmB+ffNQ6upYmySimrvystNZSBoj7x3uNqppIrsRquNN5qB6WsZn7ivcE1Umn9iVilNMzq7qcUVErzrDZUCiqoYVZ7KmWV0iSrnZWyCmqG1f5KWQV1utUpSlllda7VWUpBpXSi1XFKQQUVVFCzlI6B2tzqRKWseqnOsjpXKajfep2uafei3c0YrRRUr9MRVqcrZdXrFFRQvUtZpRRUSlnNUcoqpaCCyiqrlIJKaa7VPKWsggoqq5SySimloIK6WRWl5axmKwUVVFBBBZVVSkGlNMUqqKyyWh0qpaBSCiqroLJKKaigggqqQC1hFVRQKa0OlVJQWW1gFVRQKa0OlVJWQQUVVFBZBRVUUBOgUgoqqKCCCiqroIIKKqigggpqCaiUggoqqKCCyiqooIIKqgMqqCWgUgoqqKBSCiqooILKaohVUEEFFVRQQQUVVFBBBdUBFVRQQQUVVEpBBRVUUEEFFVRKWWUVVFBZBZVSUB1QQaXUd1QHVFZBBRVUUEEFFVRQQRWo/kJIKauggkopq6CCCiqooIIKKqiggsoqqJSCCiqolLIaoZRVUEEFFVRWQQWVUlBBpVSsgkopqKCyCiqr85RmQ6WUVVApBZVSVkFlFdQgpaCyCmoDpaCy2kNpmFVEQQXV91LFWT1+qwKsgsoqqD70Ks7qQ1dqrlVKi1hdoILqZ15WA5QOtUopqxOhTrHKJ6ujlY6wukD189J8pc2hIspqDNS2Vint+Bl4URpllU9W85S2gupF6uelVKVNrPrdyKsV1NdPElGlcW1yz+pZpTTB6qL0K4/RN1IdsLqqEN2NH6O3qEa+Wvvftoe4IorrGbGDXgj7BNd1fZTNdZ3wOeOq7d/P930iiutXxWZctX3wiNV752Of2zOkVMVvmwfoccmFG/IkpaNiJdV1K0mSJEmSJEmSJEmSpHf7AViumut2UCpBAAAAAElFTkSuQmCC')
+  ]);
+  mask.flipY = false;
+  mask.minFilter = THREE.LinearFilter;
+  mask.magFilter = THREE.LinearFilter;
+  mask.generateMipmaps = false;
+  mask.needsUpdate = true;
+
+  const character = gltf.scene;
+  character.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(character);
+  character.traverse(node => {
+    if (node.isBone) {
+      const name = node.name.toLowerCase().replace(/^mixamorig:?/, '').replace(/[^a-z0-9]/g, '');
+      rig.set(name, {bone: node, localRest: node.quaternion.clone(), modelRest: node.getWorldQuaternion(new THREE.Quaternion())});
+    }
+    if (node.isSkinnedMesh) {
+      node.frustumCulled = false;
+      installFace(node, mask);
+    }
+  });
+  const scale = 1.68 / box.getSize(new THREE.Vector3()).y;
+  const center = box.getCenter(new THREE.Vector3());
+  character.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+  character.scale.setScalar(scale);
+  characterSpace.add(character);
+
+  let previous = performance.now();
+  let time = 0;
+  renderer.setAnimationLoop(now => {
+    const delta = Math.min(.05, Math.max(0, (now - previous) / 1000));
+    previous = now;
+    const reduced = reducedMotion.matches;
+    if (!reduced) time += delta;
+    eyeGaze.value.lerp(reduced ? new THREE.Vector2() : pointer, 1 - Math.exp(-delta * 14));
+    headGaze.lerp(eyeGaze.value, 1 - Math.exp(-delta * 4));
+    if (!reduced && time > greetingStarts + 3) {
+      greetingStarts += [8.4, 10.5, 9.3][greetingCount++ % 3];
+    }
+    animateBody(reduced ? 0 : time);
+    if (reduced) eyelid.value = 0;
+    else updateBlink(time);
+    renderer.render(scene, camera);
+    canvas.dataset.ready = 'true';
+  });
+}
+
+start().catch(error => {
+  status.textContent = 'Не удалось загрузить Пикси';
+  console.error('Pixy could not be loaded', error);
+});
+</script>
+</body>
+</html>
