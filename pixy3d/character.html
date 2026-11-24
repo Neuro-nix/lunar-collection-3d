@@ -10,6 +10,8 @@
 *{box-sizing:border-box}
 html,body{width:100%;height:100%;margin:0;overflow:hidden;background:radial-gradient(ellipse at 50% 45%,#321b56 0%,#211333 66%,#160f26 100%);border-radius:24px}
 body{display:grid;place-items:center}
+html.pixy-cameo, .pixy-cameo body{background:transparent;border-radius:0}
+.pixy-cameo #status{display:none}
 canvas{display:block;width:100%;height:100%;background:transparent;outline:0}
 #status{position:fixed;inset:auto 8px 8px;color:#fff;font:12px/1.4 system-ui,sans-serif;text-align:center;text-shadow:0 1px 4px #000;pointer-events:none}
 #status:empty{display:none}
@@ -23,12 +25,23 @@ canvas{display:block;width:100%;height:100%;background:transparent;outline:0}
 import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/loaders/GLTFLoader.js';
 
+const sceneName = new URLSearchParams(location.search).get('scene');
+const works = sceneName === 'works';
+const contact = sceneName === 'contact';
+const cameo = works || contact;
+const tildaOrigin = 'https://mid-journey.tilda.ws';
+if (cameo) document.documentElement.classList.add('pixy-cameo');
+
 const canvas = document.querySelector('canvas');
 const status = document.querySelector('#status');
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(27, 1, 0.01, 100);
 camera.position.set(0, 0.93, 6.2);
 camera.lookAt(0, 0.84, 0);
+if (cameo) {
+  camera.position.z = 5.3;
+  camera.lookAt(works ? -.055 : 0, .84, 0);
+}
 
 const renderer = new THREE.WebGLRenderer({canvas, alpha: true, antialias: true, powerPreference: 'low-power'});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
@@ -50,6 +63,16 @@ const rig = new Map();
 const pointer = new THREE.Vector2();
 const eyeGaze = {value: new THREE.Vector2()};
 const eyelid = {value: 0};
+const wink = {value: 0};
+const tint = {value: new THREE.Color(0xc1d504)};
+const tintAmount = {value: 0};
+const palettes = [0xc1d504, 0x17d7c4, 0xbc7cff, 0xff855a].map(hex => new THREE.Color(hex));
+const neutral = new THREE.Vector2();
+let paletteIndex = 0;
+let reactAt = -Infinity;
+let visible = !cameo;
+let draw;
+let time = 0;
 const headGaze = new THREE.Vector2();
 const restXAxis = new THREE.Vector3(1, 0, 0);
 const boneAxis = new THREE.Vector3(0, 1, 0);
@@ -66,6 +89,11 @@ function installFace(mesh, mask) {
     shader.uniforms.eyeMask = {value: mask};
     shader.uniforms.eyeGaze = eyeGaze;
     shader.uniforms.eyelid = eyelid;
+    if (cameo) {
+      shader.uniforms.wink = wink;
+      shader.uniforms.tint = tint;
+      shader.uniforms.tintAmount = tintAmount;
+    }
     shader.uniforms.restToModel = {value: restToModel};
     shader.vertexShader = shader.vertexShader.replace('#include <common>',
       '#include <common>\nuniform mat4 restToModel;\nvarying vec3 facePosition;');
@@ -77,6 +105,7 @@ function installFace(mesh, mask) {
       uniform vec2 eyeGaze;
       uniform float eyelid;
       varying vec3 facePosition;
+      ${cameo ? 'uniform float wink; uniform vec3 tint; uniform float tintAmount;' : ''}
 
       vec3 sampleMask(vec2 pixel) {
         vec2 uv = (pixel - vec2(100., 164.)) / vec2(312., 140.);
@@ -93,7 +122,7 @@ function installFace(mesh, mask) {
         float side = step(actualMask.r, actualMask.g);
         float inward = 1. - 2. * side;
         float eyeX = mix(165., 347., side);
-        float closure = eyelid;
+        float closure = ${cameo ? 'max(eyelid, wink * (1. - side))' : 'eyelid'};
         float openHeight = max(.024, 1. - closure);
         vec2 eyePixel = vec2(pixel.x, 248. + (pixel.y - 248.) / openHeight);
         vec3 eyeShape = sampleMask(eyePixel);
@@ -132,6 +161,14 @@ function installFace(mesh, mask) {
           diffuseColor.rgb = animateEye(diffuseColor.rgb, facePosition, mask, facePixel);
         }
       }
+      ${contact ? `
+        // Isolate the yellow-green scales so the hoodie, pupils and highlights keep their colors.
+        vec3 albedo = diffuseColor.rgb;
+        float yellowGreen = smoothstep(.018, .073, albedo.g - albedo.r)
+                          * smoothstep(.075, .19, albedo.g - albedo.b);
+        float shade = clamp(albedo.g / .665, .10, 1.44);
+        diffuseColor.rgb = mix(albedo, tint * shade, yellowGreen * tintAmount);
+      ` : ''}
     `);
   };
 }
@@ -193,6 +230,46 @@ function animateBody(t) {
   leftHand.bone.quaternion.copy(leftHand.localRest);
 }
 
+function animateCameo(t) {
+  const reduced = reducedMotion.matches;
+  const breath = reduced ? 0 : Math.sin(t * 2.1);
+  const phase = t % 7.2;
+  const present = works && !reduced
+    ? smooth(phase, .44, 1.02) * (1 - smooth(phase, 2.0, 2.72))
+    : 0;
+  const reactionTime = t - reactAt;
+  const perk = contact && !reduced
+    ? smooth(reactionTime, 0, .18) * (1 - smooth(reactionTime, .46, 1.0))
+    : 0;
+
+  rotateJoint('spine1', breath * .023, works ? -.10 : .035, works ? .055 : -.035);
+  rotateJoint('spine2', works ? -.035 : -.01 - perk * .065, works ? -.08 : .06, perk * .035);
+  rotateJoint('rightshoulder', 0, present * -.09, present * -.12);
+  rotateJoint('neck', contact ? -.03 - perk * .07 : .085 * present, 0, contact ? -.055 : .045);
+  rotateJoint('head', headGaze.y * .09 + breath * .023 - perk * .09,
+    (works ? -.12 - present * .14 : .015) + headGaze.x * .17,
+    works ? .07 : -.125 + perk * .19);
+
+  aimJoint('rightarm', lerp(-.44,-.91,present) - perk * .16, lerp(-.88,-.33,present), .18 + perk * .1);
+  aimJoint('rightforearm', lerp(-.11,-.98,present) - perk * .20,
+    lerp(-.88,.09,present) + perk * .69, .42, present * -.27);
+  aimJoint('leftarm', .49 + perk * .23, -.82, .18 + perk * .23);
+  aimJoint('leftforearm', .15 + perk * .55, -.85 + perk * .47, .34 + perk * .18, perk * .20);
+  const hand = rig.get('righthand');
+  hand.bone.quaternion.copy(hand.localRest).multiply(
+    offset.setFromEuler(euler.set(.04 + .07 * breath, -.18 * present, -.06 + .22 * present))
+  );
+  wink.value = contact && !reduced
+    ? smooth(reactionTime, .065, .15) * (1 - smooth(reactionTime, .25, .40))
+    : 0;
+}
+
+function cycleColor() {
+  if (!contact) return;
+  paletteIndex = (paletteIndex + 1) % palettes.length;
+  reactAt = time;
+}
+
 function updateBlink(t) {
   if (t >= nextBlink) {
     lastBlink = t;
@@ -226,11 +303,34 @@ if (window.parent === window) {
            (event.clientY - rect.top - rect.height * .36) / distance);
   }, {passive: true});
   canvas.addEventListener('pointerleave', () => lookAt(0, 0));
+  if (contact) canvas.addEventListener('click', cycleColor);
 } else {
   window.addEventListener('message', event => {
-    if (event.source !== window.parent || event.origin !== 'https://mid-journey.tilda.ws') return;
+    if (event.source !== window.parent || event.origin !== tildaOrigin) return;
     if (event.data?.type === 'pixy-pointer') lookAt(event.data.x, event.data.y);
+    if (event.data?.type === 'pixy-color') cycleColor();
+    if (cameo && event.data?.type === 'pixy-visible') {
+      visible = event.data.visible === true;
+      if (draw) renderer.setAnimationLoop(visible ? draw : null);
+    }
   });
+}
+
+function scaleTexture(mesh) {
+  // The original 8K color map is shared by URL. The two small cameos need a smaller GPU texture.
+  const map = mesh.material.map;
+  const source = map?.image;
+  if (!source || typeof source.width !== 'number' || Math.max(source.width, source.height) <= 2048) return;
+  const factor = 2048 / Math.max(source.width, source.height);
+  const surface = document.createElement('canvas');
+  surface.width = Math.round(source.width * factor);
+  surface.height = Math.round(source.height * factor);
+  const context = surface.getContext('2d', {alpha: false});
+  if (!context) return;
+  context.drawImage(source, 0, 0, surface.width, surface.height);
+  map.image = surface;
+  map.needsUpdate = true;
+  if (source instanceof ImageBitmap) source.close();
 }
 
 async function start() {
@@ -254,6 +354,7 @@ async function start() {
     }
     if (node.isSkinnedMesh) {
       node.frustumCulled = false;
+      if (cameo) scaleTexture(node);
       installFace(node, mask);
     }
   });
@@ -264,23 +365,42 @@ async function start() {
   characterSpace.add(character);
 
   let previous = performance.now();
-  let time = 0;
-  renderer.setAnimationLoop(now => {
+  let painted = false;
+  draw = (now) => {
     const delta = Math.min(.05, Math.max(0, (now - previous) / 1000));
     previous = now;
     const reduced = reducedMotion.matches;
     if (!reduced) time += delta;
-    eyeGaze.value.lerp(reduced ? new THREE.Vector2() : pointer, 1 - Math.exp(-delta * 14));
+    const target = reduced ? neutral : pointer;
+    const gazeEase = 1 - Math.exp(-delta * 14);
+    eyeGaze.value.lerp(target, gazeEase);
+    if (works && !reduced && target.lengthSq() < .0025) {
+      eyeGaze.value.x = lerp(eyeGaze.value.x, -.32, gazeEase);
+    }
     headGaze.lerp(eyeGaze.value, 1 - Math.exp(-delta * 4));
     if (!reduced && time > greetingStarts + 3) {
       greetingStarts += [8.4, 10.5, 9.3][greetingCount++ % 3];
     }
-    animateBody(reduced ? 0 : time);
+    if (cameo) animateCameo(reduced ? 0 : time);
+    else animateBody(reduced ? 0 : time);
+    if (contact) {
+      const fade = reduced ? 1 : 1 - Math.exp(-delta * 8);
+      tint.value.lerp(palettes[paletteIndex], fade);
+      tintAmount.value = lerp(tintAmount.value, paletteIndex ? 1 : 0, fade);
+    }
     if (reduced) eyelid.value = 0;
     else updateBlink(time);
     renderer.render(scene, camera);
-    canvas.dataset.ready = 'true';
-  });
+    if (!painted) {
+      painted = true;
+      canvas.dataset.ready = 'true';
+      if (cameo && window.parent !== window) {
+        window.parent.postMessage({type:'pixy-ready'}, tildaOrigin);
+      }
+    }
+  };
+  draw(previous);
+  if (visible || window.parent === window) renderer.setAnimationLoop(draw);
 }
 
 start().catch(error => {
