@@ -64,7 +64,11 @@ loader.load('./pixy.glb',gltf=>{
   });
   camera.position.set(0,0.93,6.2);
   camera.lookAt(0,0.84,0);
-  const waveTracks=Object.entries(pixyWaveData).map(([name,track])=>new THREE.QuaternionKeyframeTrack(name+'.quaternion',track.times,track.values));
+  const waveTracks=Object.entries(pixyWaveData).map(([name,track])=>{
+    const key=name.split(':').pop().replace(/[^a-z0-9]/gi,'').toLowerCase();
+    const bone=bones.get(key);
+    return new THREE.QuaternionKeyframeTrack(bone.uuid+'.quaternion',track.times,track.values);
+  });
   mixer=new THREE.AnimationMixer(character);
   mixer.clipAction(new THREE.AnimationClip('Pixy_Greeting_Wave',-1,waveTracks)).setLoop(THREE.LoopRepeat,Infinity).play();
   status.textContent='';
