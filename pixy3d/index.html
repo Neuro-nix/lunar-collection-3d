@@ -41,10 +41,10 @@ fill.position.set(3,1,-2);scene.add(fill);
 
 const pivot=new THREE.Group();scene.add(pivot);
 const bones=new Map(),rest=new Map();
-let character=null,baseHeight=0;
+let character=null,baseHeight=0,mixer=null;
 const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const loader=new GLTFLoader();
-loader.load('./pixy.glb',gltf=>{
+loader.load('./pixy-wave.glb',gltf=>{
   character=gltf.scene;
   const box=new THREE.Box3().setFromObject(character);
   const size=box.getSize(new THREE.Vector3());
@@ -64,6 +64,7 @@ loader.load('./pixy.glb',gltf=>{
   });
   camera.position.set(0,0.93,6.2);
   camera.lookAt(0,0.84,0);
+  if(gltf.animations.length){mixer=new THREE.AnimationMixer(character);mixer.clipAction(gltf.animations.find(clip=>clip.name==='Pixy_Greeting_Wave')||gltf.animations[0]).play();}
   status.textContent='';
 },undefined,error=>{
   status.textContent='Не удалось загрузить Пикси';
@@ -99,19 +100,11 @@ resize();
 function frame(){
   requestAnimationFrame(frame);
   if(!character)return;
-  const t=reduced?0:clock.getElapsedTime();
-  const phase=t%7.5;const wave=!reduced&&phase<2.6?Math.sin((phase/2.6)*Math.PI):0;const waveMotion=wave*Math.sin(t*7.2);
-  bonePose('Hips',(n,b)=>{n.position.y=b.position.y+Math.sin(t*1.9)*0.012});
-  bonePose('Spine',(n,b)=>{n.rotation.set(b.rotation.x+Math.sin(t*0.9)*0.018,b.rotation.y,b.rotation.z+Math.sin(t*1.35)*0.025)});
-  bonePose('Spine1',(n,b)=>{n.rotation.set(b.rotation.x,b.rotation.y+Math.sin(t*0.7)*0.025,b.rotation.z+Math.sin(t*1.35+0.5)*0.018)});
-  bonePose('Spine2',(n,b)=>{n.rotation.y=b.rotation.y+Math.sin(t*0.55)*0.035});
-  bonePose('Head',(n,b)=>{n.rotation.set(b.rotation.x+Math.sin(t*0.72)*0.025,b.rotation.y+Math.sin(t*0.48)*0.13,b.rotation.z+Math.sin(t*0.62)*0.018)});
-  boneWorldAxis('RightShoulder',[0,0,1],-1.1+waveMotion*0.1);
-  boneWorldAxis('RightArm',[0,0,1],0.02);
-  boneWorldAxis('RightForeArm',[0,0,1],1.35-waveMotion*0.35);
-  boneWorldAxis('RightHand',[0,1,0],waveMotion*0.48);
-  boneWorldAxis('RightHand',[0,0,1],waveMotion*0.12);
-  pivot.rotation.y=reduced?0:Math.sin(t*0.75)*0.12;pivot.rotation.z=reduced?0:Math.sin(t*1.1)*0.012;pivot.position.y=reduced?0:Math.sin(t*2.0)*0.025;
+  const delta=clock.getDelta();const t=reduced?0:clock.elapsedTime;
+  if(mixer&&!reduced)mixer.update(delta);
+  
+  
+  pivot.rotation.y=reduced?0:Math.sin(t*0.75)*0.10;pivot.rotation.z=reduced?0:Math.sin(t*1.1)*0.01;pivot.position.y=reduced?0:Math.sin(t*2.0)*0.02;
   scene.updateMatrixWorld(true);
   renderer.render(scene,camera);
 }
